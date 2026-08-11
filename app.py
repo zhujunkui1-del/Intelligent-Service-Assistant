@@ -24,7 +24,6 @@ st.markdown("""
 <style>
     /* ========== 主题变量 ========== */
     :root {
-        --sidebar-bg: linear-gradient(180deg, #F0F4F8 0%, #E2E8F0 100%);
         --sidebar-border: #CBD5E1;
         --accent-color: #00B4D8;
         --status-ok-bg: #ECFDF5;
@@ -38,12 +37,10 @@ st.markdown("""
         --status-info-text: #1E40AF;
     }
     
-    /* ========== 侧边栏 - 使用变量 ========== */
+    /* ========== 侧边栏 - 背景由 JS 完全控制 ========== */
     section[data-testid="stSidebar"] {
-        background: var(--sidebar-bg) !important;
-        background-color: var(--sidebar-bg) !important;
-        background-image: none !important;
         border-right: 1px solid var(--sidebar-border) !important;
+        /* 不设置 background，全部交给 JS */
     }
     
     /* 侧边栏内部所有容器 - 设为透明，让外层颜色透出来 */
@@ -151,43 +148,32 @@ st.markdown("""
         var sidebar = document.querySelector('section[data-testid="stSidebar"]');
         if (!sidebar) return;
         
-        // ---- 改背景 ----
+        // ---- 改背景（白天和深色都显式设置） ----
         if (isDark) {
-            sidebar.style.setProperty('background', '#111827', 'important');
-            sidebar.style.setProperty('background-color', '#111827', 'important');
+            // 深色模式
+            sidebar.style.setProperty('background', '#2b3347', 'important');
+            sidebar.style.setProperty('background-color', '#2b3347', 'important');
             sidebar.style.setProperty('background-image', 'none', 'important');
-            
-            var children = sidebar.querySelectorAll('div');
-            for (var i = 0; i < children.length; i++) {
-                children[i].style.setProperty('background', 'transparent', 'important');
-                children[i].style.setProperty('background-color', 'transparent', 'important');
-                children[i].style.setProperty('background-image', 'none', 'important');
-            }
-            
-            var sc = document.querySelector('[data-testid="stSidebarContent"]');
-            if (sc) {
-                sc.style.setProperty('background', 'transparent', 'important');
-                sc.style.setProperty('background-color', 'transparent', 'important');
-                sc.style.setProperty('background-image', 'none', 'important');
-            }
         } else {
-            sidebar.style.removeProperty('background');
-            sidebar.style.removeProperty('background-color');
-            sidebar.style.removeProperty('background-image');
-            
-            var children = sidebar.querySelectorAll('div');
-            for (var i = 0; i < children.length; i++) {
-                children[i].style.removeProperty('background');
-                children[i].style.removeProperty('background-color');
-                children[i].style.removeProperty('background-image');
-            }
-            
-            var sc = document.querySelector('[data-testid="stSidebarContent"]');
-            if (sc) {
-                sc.style.removeProperty('background');
-                sc.style.removeProperty('background-color');
-                sc.style.removeProperty('background-image');
-            }
+            // 白天模式
+            sidebar.style.setProperty('background', '#e2e9f1', 'important');
+            sidebar.style.setProperty('background-color', '#e2e9f1', 'important');
+            sidebar.style.setProperty('background-image', 'none', 'important');
+        }
+        
+        // 让所有子容器透明
+        var children = sidebar.querySelectorAll('div');
+        for (var i = 0; i < children.length; i++) {
+            children[i].style.setProperty('background', 'transparent', 'important');
+            children[i].style.setProperty('background-color', 'transparent', 'important');
+            children[i].style.setProperty('background-image', 'none', 'important');
+        }
+        
+        var sc = document.querySelector('[data-testid="stSidebarContent"]');
+        if (sc) {
+            sc.style.setProperty('background', 'transparent', 'important');
+            sc.style.setProperty('background-color', 'transparent', 'important');
+            sc.style.setProperty('background-image', 'none', 'important');
         }
         
         // ---- 改文字颜色 ----
