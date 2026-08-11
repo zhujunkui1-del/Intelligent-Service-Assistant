@@ -39,7 +39,8 @@ st.markdown("""
     
     /* ========== 侧边栏 - 背景由 JS 完全控制 ========== */
     section[data-testid="stSidebar"] {
-        border-right: 1px solid var(--sidebar-border) !important;
+        border-right: none !important;
+        box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
         /* 不设置 background，全部交给 JS */
     }
     
@@ -59,6 +60,10 @@ st.markdown("""
     
     /* ========== 标题（颜色由 JS 控制） ========== */
     .app-title {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: inherit;
         border-bottom: 3px solid var(--accent-color) !important;
         padding-bottom: 0.4rem;
         margin-bottom: 0.5rem;
@@ -76,6 +81,8 @@ st.markdown("""
         font-weight: 700;
         margin-top: 1rem;
     }
+    section[data-testid="stSidebar"] h3:first-of-type { margin-top: 0.4rem; }
+    section[data-testid="stSidebar"] label { margin-bottom: 0; padding-bottom: 0; }
     
     section[data-testid="stSidebar"] hr {
         border-color: var(--sidebar-border) !important;
@@ -298,15 +305,43 @@ def _chunk_docs(docs):
     return chunks, metas
 
 def _scrape_and_append(kb):
+    import urllib.parse
     try:
-        resp = requests.get(WEBSITE_URL, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
-        resp.encoding = resp.apparent_encoding or "utf-8"
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "header"]):
-            tag.decompose()
-        text = re.sub(r"\n{3,}", "\n\n", soup.get_text(separator="\n", strip=True))
-        if len(text) > 100 and kb["vectorizer"] is not None:
-            wc, wm = _chunk_docs([{"source": "官网: www.nowogen.com", "page": 1, "text": text}])
+        visited = set()
+        to_visit = [WEBSITE_URL]
+        all_texts = []
+        
+        while to_visit and len(visited) < 20:
+            url = to_visit.pop(0)
+            if url in visited:
+                continue
+            visited.add(url)
+            try:
+                resp = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
+                resp.encoding = resp.apparent_encoding or "utf-8"
+                soup = BeautifulSoup(resp.text, "html.parser")
+                
+                # Collect internal links
+                for a in soup.find_all("a", href=True):
+                    href = a["href"]
+                    full = urllib.parse.urljoin(url, href)
+                    base_domain = urllib.parse.urlparse(WEBSITE_URL).netloc
+                    if urllib.parse.urlparse(full).netloc == base_domain and full not in visited:
+                        to_visit.append(full)
+                
+                # Extract text
+                for tag in soup(["script", "style", "nav", "footer", "header"]):
+                    tag.decompose()
+                text = re.sub(r"\n{3,}", "\n\n", soup.get_text(separator="\n", strip=True))
+                if len(text) > 100:
+                    title_tag = soup.find("title")
+                    page_title = title_tag.get_text(strip=True) if title_tag else url
+                    all_texts.append({"source": f"官网: {page_title}", "page": len(all_texts)+1, "text": text})
+            except:
+                continue
+        
+        if all_texts and kb["vectorizer"] is not None:
+            wc, wm = _chunk_docs(all_texts)
             kb["chunks"].extend(wc)
             kb["metadatas"].extend(wm)
             kb["matrix"] = kb["vectorizer"].transform(kb["chunks"])
@@ -342,7 +377,8 @@ Rules:
 2. If not covered, clearly state so
 3. Cite sources like [src 1], [src 2]
 4. Be concise, professional, well-organized
-5. Respond in Chinese"""
+5. If multiple questions are asked, answer each one separately with clear numbering
+6. Respond in Chinese"""
     try:
         cli = OpenAI(api_key=api_key, base_url=base_url)
         msgs = [{"role": "system", "content": sp}]
@@ -380,10 +416,32 @@ with st.sidebar:
             placeholder="sk-...", key="oai_key_input"
         )
     current_key, _, _ = get_api_config()
+    key_valid = False
     if current_key:
+        if st.session_state.get('_key_validated_key') == current_key and st.session_state.get('_key_valid', False):
+            key_valid = True
+        else:
+            with st.spinner('正在验证 API Key...'):
+                try:
+                    _, test_base, _ = get_api_config()
+                    test_cli = OpenAI(api_key=current_key, base_url=test_base)
+                    test_cli.models.list()
+                    st.session_state['_key_valid'] = True
+                    st.session_state['_key_validated_key'] = current_key
+                    key_valid = True
+                except Exception:
+                    st.session_state['_key_valid'] = False
+                    st.session_state['_key_validated_key'] = ''
+    if key_valid:
         st.markdown(
             f'<div class="status-box status-ok">'
-            f'<i class="fa-solid fa-circle-check"></i> {st.session_state.provider} Key 已配置</div>',
+            f'<i class="fa-solid fa-circle-check"></i> {st.session_state.provider} Key 已验证</div>',
+            unsafe_allow_html=True
+        )
+    elif current_key:
+        st.markdown(
+            f'<div class="status-box status-warn">'
+            f'<i class="fa-solid fa-triangle-exclamation"></i> API Key 无效</div>',
             unsafe_allow_html=True
         )
 
@@ -415,16 +473,16 @@ with st.sidebar:
     ]:
         if st.button(q, key=f"s_{abs(hash(q))}", use_container_width=True):
             st.session_state.pending_question = q
-            st.rerun()
+
 
 # ---- Chat ----
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-query = st.session_state.pop("pending_question", None)
-if query is None:
-    query = st.chat_input("请输入您的问题...")
+chat_val = st.chat_input("请输入您的问题...")
+pending = st.session_state.pop("pending_question", None)
+query = pending or chat_val
 
 if query:
     with st.chat_message("user"):
@@ -471,3 +529,4 @@ if query:
                 "role": "assistant",
                 "content": "未找到相关内容，请尝试换个问法。"
             })
+    st.rerun()
