@@ -13,54 +13,222 @@ from bs4 import BeautifulSoup
 
 st.set_page_config(
     page_title="氢璞创能 · 智能知识助手",
-    page_icon="",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ---- CSS + Dark Mode JS ----
+# ---- CSS & Dark Mode JS ----
 st.markdown("""
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #F0F4F8 0%, #E2E8F0 100%);
-        border-right: 1px solid #CBD5E1;
+    /* ========== 主题变量 ========== */
+    :root {
+        --sidebar-bg: linear-gradient(180deg, #F0F4F8 0%, #E2E8F0 100%);
+        --sidebar-border: #CBD5E1;
+        --accent-color: #00B4D8;
+        --status-ok-bg: #ECFDF5;
+        --status-ok-border: #6EE7B7;
+        --status-ok-text: #065F46;
+        --status-warn-bg: #FFFBEB;
+        --status-warn-border: #FCD34D;
+        --status-warn-text: #92400E;
+        --status-info-bg: #EFF6FF;
+        --status-info-border: #93C5FD;
+        --status-info-text: #1E40AF;
     }
-    section[data-testid="stSidebar"] h3 { color: #0F4C81; font-size: 0.95rem; font-weight: 700; margin-top: 1rem; }
-    section[data-testid="stSidebar"] hr { border-color: #CBD5E1; margin: 0.4rem 0; }
-
-    html[data-theme="dark"] [data-testid="stSidebar"],
-    html[data-theme="dark"] [data-testid="stSidebar"] > div:first-child,
-    html[data-theme="dark"] [data-testid="stSidebarContent"] {
-        background: #111827 !important;
-        background-color: #111827 !important;
+    
+    /* ========== 侧边栏 - 使用变量 ========== */
+    section[data-testid="stSidebar"] {
+        background: var(--sidebar-bg) !important;
+        background-color: var(--sidebar-bg) !important;
+        background-image: none !important;
+        border-right: 1px solid var(--sidebar-border) !important;
+    }
+    
+    /* 侧边栏内部所有容器 - 设为透明，让外层颜色透出来 */
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] > div > div,
+    section[data-testid="stSidebar"] > div > div > div,
+    section[data-testid="stSidebar"] > div > div > div > div,
+    [data-testid="stSidebarContent"],
+    [data-testid="stSidebarContent"] > div,
+    [data-testid="stSidebarContent"] > div > div,
+    [data-testid="stSidebarContent"] > div > div > div {
+        background: transparent !important;
+        background-color: transparent !important;
         background-image: none !important;
     }
-    html[data-theme="dark"] [data-testid="stSidebar"] { border-right: 1px solid #1F2937 !important; }
-    html[data-theme="dark"] [data-testid="stSidebar"] h3 { color: #93C5FD !important; }
-    html[data-theme="dark"] [data-testid="stSidebar"] hr { border-color: #374151 !important; }
-    html[data-theme="dark"] .status-ok { background: #064E3B !important; border-color: #059669 !important; color: #D1FAE5 !important; }
-    html[data-theme="dark"] .status-warn { background: #78350F !important; border-color: #D97706 !important; color: #FEF3C7 !important; }
-    html[data-theme="dark"] .status-info { background: #1E3A5F !important; border-color: #3B82F6 !important; color: #DBEAFE !important; }
-    html[data-theme="dark"] .app-title { color: #93C5FD !important; border-bottom-color: #22D3EE !important; }
-    html[data-theme="dark"] [data-testid="stChatInput"] { background: #0E1117 !important; }
-    html[data-theme="dark"] [data-testid="stSidebar"] .stButton > button { background: #1F2937 !important; border-color: #374151 !important; color: #D1D5DB !important; }
-    html[data-theme="dark"] [data-testid="stSidebar"] input { background: #1F2937 !important; border-color: #374151 !important; color: #F9FAFB !important; }
-
-    section[data-testid="stSidebar"] button[data-testid="stSidebarCollapseButton"],
-    [data-testid="stSidebarCollapseButton"] { display: none !important; visibility: hidden !important; pointer-events: none !important; }
-
-    .app-title { color: #0F4C81; font-size: 1.8rem; font-weight: 800; border-bottom: 3px solid #00B4D8; padding-bottom: 0.4rem; margin-bottom: 0; }
-    .status-box { border-radius: 8px; padding: 0.4rem 0.65rem; margin: 0.3rem 0; font-size: 0.82rem; }
-    .status-ok { background: #ECFDF5; border: 1px solid #6EE7B7; color: #065F46; }
-    .status-warn { background: #FFFBEB; border: 1px solid #FCD34D; color: #92400E; }
-    .status-info { background: #EFF6FF; border: 1px solid #93C5FD; color: #1E40AF; }
-    [data-testid="stChatMessage"] { border-radius: 10px; padding: 0.4rem 0.8rem; }
-    .stChatMessage:first-of-type { margin-top: 5px; }
-    section[data-testid="stSidebar"] .stButton > button { border-radius: 6px; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    [data-testid="stChatInput"] { position: sticky; bottom: 0; z-index: 100; background: inherit; padding-top: 0.5rem; }
+    
+    /* ========== 标题（颜色由 JS 控制） ========== */
+    .app-title {
+        border-bottom: 3px solid var(--accent-color) !important;
+        padding-bottom: 0.4rem;
+        margin-bottom: 0.5rem;
+        font-size: 1.5rem;
+        font-weight: 800;
+    }
+    
+    .app-title i {
+        color: var(--accent-color) !important;
+    }
+    
+    /* ========== 侧边栏标题（颜色由 JS 控制） ========== */
+    section[data-testid="stSidebar"] h3 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin-top: 1rem;
+    }
+    
+    section[data-testid="stSidebar"] hr {
+        border-color: var(--sidebar-border) !important;
+        margin: 0.4rem 0;
+    }
+    
+    /* ========== 状态指示器 ========== */
+    .status-box {
+        border-radius: 8px;
+        padding: 0.4rem 0.65rem;
+        margin: 0.3rem 0;
+        font-size: 0.82rem;
+    }
+    .status-ok {
+        background: var(--status-ok-bg) !important;
+        border: 1px solid var(--status-ok-border) !important;
+        color: var(--status-ok-text) !important;
+    }
+    .status-warn {
+        background: var(--status-warn-bg) !important;
+        border: 1px solid var(--status-warn-border) !important;
+        color: var(--status-warn-text) !important;
+    }
+    .status-info {
+        background: var(--status-info-bg) !important;
+        border: 1px solid var(--status-info-border) !important;
+        color: var(--status-info-text) !important;
+    }
+    
+    /* ========== 聊天组件 ========== */
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+    [data-testid="stChatMessage"] {
+        border-radius: 10px;
+        padding: 0.4rem 0.8rem;
+    }
+    .stChatMessage:first-of-type {
+        margin-top: 5px;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        border-radius: 6px;
+        font-size: 0.82rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    [data-testid="stChatInput"] {
+        position: sticky;
+        bottom: 0;
+        z-index: 100;
+        background: inherit;
+        padding-top: 0.5rem;
+    }
+    
+    /* 深色模式聊天输入框 */
+    [data-theme="dark"] [data-testid="stChatInput"],
+    [data-theme="dark"] [data-testid="stChatInput"]:focus,
+    [data-theme="dark"] [data-testid="stChatInput"]:hover {
+        background: #0E1117 !important;
+    }
 </style>
+
+<script>
+(function() {
+    function fixSidebar() {
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var sidebar = document.querySelector('section[data-testid="stSidebar"]');
+        if (!sidebar) return;
+        
+        // ---- 改背景 ----
+        if (isDark) {
+            sidebar.style.setProperty('background', '#111827', 'important');
+            sidebar.style.setProperty('background-color', '#111827', 'important');
+            sidebar.style.setProperty('background-image', 'none', 'important');
+            
+            var children = sidebar.querySelectorAll('div');
+            for (var i = 0; i < children.length; i++) {
+                children[i].style.setProperty('background', 'transparent', 'important');
+                children[i].style.setProperty('background-color', 'transparent', 'important');
+                children[i].style.setProperty('background-image', 'none', 'important');
+            }
+            
+            var sc = document.querySelector('[data-testid="stSidebarContent"]');
+            if (sc) {
+                sc.style.setProperty('background', 'transparent', 'important');
+                sc.style.setProperty('background-color', 'transparent', 'important');
+                sc.style.setProperty('background-image', 'none', 'important');
+            }
+        } else {
+            sidebar.style.removeProperty('background');
+            sidebar.style.removeProperty('background-color');
+            sidebar.style.removeProperty('background-image');
+            
+            var children = sidebar.querySelectorAll('div');
+            for (var i = 0; i < children.length; i++) {
+                children[i].style.removeProperty('background');
+                children[i].style.removeProperty('background-color');
+                children[i].style.removeProperty('background-image');
+            }
+            
+            var sc = document.querySelector('[data-testid="stSidebarContent"]');
+            if (sc) {
+                sc.style.removeProperty('background');
+                sc.style.removeProperty('background-color');
+                sc.style.removeProperty('background-image');
+            }
+        }
+        
+        // ---- 改文字颜色 ----
+        var title = document.querySelector('.app-title');
+        var headings = document.querySelectorAll('section[data-testid="stSidebar"] h3');
+        
+        if (isDark) {
+            // 夜间模式：纯白色
+            if (title) title.style.setProperty('color', '#FFFFFF', 'important');
+            for (var i = 0; i < headings.length; i++) {
+                headings[i].style.setProperty('color', '#FFFFFF', 'important');
+            }
+        } else {
+            // 白天模式：深蓝色 #0F4C82
+            if (title) title.style.setProperty('color', '#0F4C82', 'important');
+            for (var i = 0; i < headings.length; i++) {
+                headings[i].style.setProperty('color', '#0F4C82', 'important');
+            }
+        }
+    }
+    
+    // 监听 data-theme 变化（事件驱动，不轮询）
+    var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(m) {
+            if (m.attributeName === 'data-theme') {
+                fixSidebar();
+            }
+        });
+    });
+    observer.observe(document.documentElement, { attributes: true });
+    
+    // DOM加载完成后执行
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fixSidebar);
+    } else {
+        fixSidebar();
+    }
+})();
+</script>
 """, unsafe_allow_html=True)
+
 
 # ---- Config ----
 PROJECT_DIR = Path(__file__).parent
@@ -88,7 +256,7 @@ def init_session():
     if not st.session_state.messages:
         st.session_state.messages = [{
             "role": "assistant",
-            "content": "您好! 我是氢璞创能的企业知识与智能服务助手，请随时向我提问。"
+            "content": "您好！我是氢璞创能的企业知识与智能服务助手，请随时向我提问。"
         }]
 
 init_session()
@@ -124,14 +292,16 @@ def _parse_pdfs():
                     t = (page.extract_text() or "").strip()
                     if len(t) > 20:
                         docs.append({"source": p.name, "page": i + 1, "text": t})
-        except: pass
+        except:
+            pass
     return docs
 
 def _chunk_docs(docs):
     chunks, metas = [], []
     for d in docs:
         text = d["text"]
-        start = 0; ci = 0
+        start = 0
+        ci = 0
         while start < len(text):
             c = text[start:start + CHUNK_SIZE].strip()
             if c:
@@ -146,17 +316,21 @@ def _scrape_and_append(kb):
         resp = requests.get(WEBSITE_URL, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
         resp.encoding = resp.apparent_encoding or "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer", "header"]): tag.decompose()
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
         text = re.sub(r"\n{3,}", "\n\n", soup.get_text(separator="\n", strip=True))
         if len(text) > 100 and kb["vectorizer"] is not None:
             wc, wm = _chunk_docs([{"source": "官网: www.nowogen.com", "page": 1, "text": text}])
-            kb["chunks"].extend(wc); kb["metadatas"].extend(wm)
+            kb["chunks"].extend(wc)
+            kb["metadatas"].extend(wm)
             kb["matrix"] = kb["vectorizer"].transform(kb["chunks"])
             kb["web_count"] = len(wc)
-    except: pass
+    except:
+        pass
 
 def search_kb(kb, query, k=5):
-    if kb["vectorizer"] is None or not kb["chunks"]: return []
+    if kb["vectorizer"] is None or not kb["chunks"]:
+        return []
     qvec = kb["vectorizer"].transform([query])
     scores = cosine_similarity(qvec, kb["matrix"]).flatten()
     top = np.argsort(scores)[-k:][::-1]
@@ -167,7 +341,8 @@ def search_kb(kb, query, k=5):
 # ---- Chat ----
 def generate_answer(query, ctx_docs, history):
     api_key, base_url, model = get_api_config()
-    if not api_key: return None, "API Key not configured"
+    if not api_key:
+        return None, "API Key not configured"
     parts = [f"[src {i+1}] {d['source']} p.{d['page']}:\n{d['text']}" for i, d in enumerate(ctx_docs)]
     sp = f"""You are an enterprise knowledge assistant for Beijing Hydrotrans Creative Energy Technology Co., Ltd.
 Answer user questions based on the provided reference materials.
@@ -196,7 +371,7 @@ kb = build_knowledge_base()
 
 # ---- UI: Title ----
 st.markdown(
-    '<h1 class="app-title"><i class="fa-solid fa-bolt" style="color: var(--accent);"></i> '
+    '<h1 class="app-title"><i class="fa-solid fa-bolt"></i> '
     '氢璞创能 · 企业知识与智能服务助手</h1>',
     unsafe_allow_html=True
 )
@@ -280,7 +455,8 @@ if query:
     elif not kb["chunks"]:
         st.toast("知识库为空", icon=":material/error:")
         st.session_state.messages.append({
-            "role": "assistant", "content": "知识库为空，请检查 PDF 文件是否存在。"
+            "role": "assistant",
+            "content": "知识库为空，请检查 PDF 文件是否存在。"
         })
     else:
         with st.spinner("正在检索..."):
@@ -306,5 +482,6 @@ if query:
             st.session_state.messages.append({"role": "assistant", "content": ans})
         else:
             st.session_state.messages.append({
-                "role": "assistant", "content": "未找到相关内容，请尝试换个问法。"
+                "role": "assistant",
+                "content": "未找到相关内容，请尝试换个问法。"
             })
