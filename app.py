@@ -1,15 +1,6 @@
 ﻿import streamlit as st
-import os
-import re
-import threading
-from pathlib import Path
-import pdfplumber
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from openai import OpenAI
-import requests
-from bs4 import BeautifulSoup
+from kb_engine import build_knowledge_base, search_kb
 
 st.set_page_config(
     page_title="氢璞创能 · 智能知识助手",
@@ -223,14 +214,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ---- Config ----
-PROJECT_DIR = Path(__file__).parent
-WEBSITE_URL = "https://www.nowogen.com"
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
-
 PROVIDERS = {
-    "DeepSeek": {"base": "https://api.deepseek.com", "model": "deepseek-chat"},
+    "DeepSeek": {"base": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
     "OpenAI":   {"base": "https://api.openai.com/v1",    "model": "gpt-4o-mini"},
 }
 
@@ -258,134 +243,48 @@ def get_api_config():
     p = st.session_state.provider
     cfg = PROVIDERS[p]
     k = st.session_state.api_key if p == "DeepSeek" else st.session_state.openai_key
-    return k, cfg["base"], cfg["model"]
+    return (k or "").strip(), cfg["base"], cfg["model"]
 
 # ---- Knowledge Base ----
-@st.cache_resource
-def build_knowledge_base():
-    docs = _parse_pdfs()
-    kb = {"chunks": [], "metadatas": [], "vectorizer": None, "matrix": None, "web_count": 0}
-    if docs:
-        chunks, metas = _chunk_docs(docs)
-        kb["chunks"] = chunks
-        kb["metadatas"] = metas
-        vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(1, 3), max_features=3000)
-        kb["matrix"] = vec.fit_transform(chunks)
-        kb["vectorizer"] = vec
-    threading.Thread(target=_scrape_and_append, args=(kb,), daemon=True).start()
-    return kb
-
-def _parse_pdfs():
-    docs = []
-    for p in sorted(PROJECT_DIR.glob("*.md")):
-        if p.name.upper() == "README.MD": continue
-        try:
-            text = p.read_text(encoding="utf-8")
-            sections = re.split(r"\n(?=## )", text)
-            for si, section in enumerate(sections):
-                s = section.strip()
-                if len(s) > 30:
-                    docs.append({"source": p.name, "page": si + 1, "text": s})
-        except:
-            pass
-    return docs
-
-def _chunk_docs(docs):
-    chunks, metas = [], []
-    for d in docs:
-        text = d["text"]
-        start = 0
-        ci = 0
-        while start < len(text):
-            c = text[start:start + CHUNK_SIZE].strip()
-            if c:
-                chunks.append(c)
-                metas.append({"source": d["source"], "page": d["page"], "ci": ci})
-                ci += 1
-            start += CHUNK_SIZE - CHUNK_OVERLAP
-    return chunks, metas
-
-def _scrape_and_append(kb):
-    import urllib.parse
-    try:
-        visited = set()
-        to_visit = [
-            WEBSITE_URL,
-            WEBSITE_URL.rstrip("/") + "/h-col-104.html",  # 新闻中心
-        ]
-        all_texts = []
-        
-        while to_visit and len(visited) < 20:
-            url = to_visit.pop(0)
-            if url in visited:
-                continue
-            visited.add(url)
-            try:
-                resp = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-                resp.encoding = resp.apparent_encoding or "utf-8"
-                soup = BeautifulSoup(resp.text, "html.parser")
-                
-                # Collect internal links
-                for a in soup.find_all("a", href=True):
-                    href = a["href"]
-                    full = urllib.parse.urljoin(url, href)
-                    base_domain = urllib.parse.urlparse(WEBSITE_URL).netloc
-                    if urllib.parse.urlparse(full).netloc == base_domain and full not in visited:
-                        to_visit.append(full)
-                
-                # Extract text
-                for tag in soup(["script", "style", "nav", "footer", "header"]):
-                    tag.decompose()
-                text = re.sub(r"\n{3,}", "\n\n", soup.get_text(separator="\n", strip=True))
-                if len(text) > 100:
-                    title_tag = soup.find("title")
-                    page_title = title_tag.get_text(strip=True) if title_tag else url
-                    all_texts.append({"source": f"官网: {page_title}", "page": len(all_texts)+1, "text": text})
-            except:
-                continue
-        
-        if all_texts and kb["vectorizer"] is not None:
-            wc, wm = _chunk_docs(all_texts)
-            kb["chunks"].extend(wc)
-            kb["metadatas"].extend(wm)
-            kb["matrix"] = kb["vectorizer"].transform(kb["chunks"])
-            kb["web_count"] = len(wc)
-    except:
-        pass
-
-def search_kb(kb, query, k=5):
-    if kb["vectorizer"] is None or not kb["chunks"]:
-        return []
-    qvec = kb["vectorizer"].transform([query])
-    scores = cosine_similarity(qvec, kb["matrix"]).flatten()
-    top = np.argsort(scores)[-k:][::-1]
-    return [{"text": kb["chunks"][i], "source": kb["metadatas"][i]["source"],
-             "page": kb["metadatas"][i]["page"], "score": float(scores[i])}
-            for i in top if scores[i] > 0]
+@st.cache_resource(show_spinner=False)
+def load_kb():
+    return build_knowledge_base()
 
 # ---- Chat ----
 def generate_answer(query, ctx_docs, history):
     api_key, base_url, model = get_api_config()
     if not api_key:
         return None, "API Key not configured"
-    parts = [f"{d['source']} p.{d['page']}:\n{d['text']}" for i, d in enumerate(ctx_docs)]
-    sp = f"""You are an enterprise knowledge assistant for Beijing Hydrotrans Creative Energy Technology Co., Ltd.
-Answer user questions based on the provided reference materials.
 
-=== References ===
+    parts = []
+    for i, d in enumerate(ctx_docs):
+        meta = f"{d['source']} · 第{d['page']}页"
+        if d.get("section"):
+            meta += f" · {d['section']}"
+        if d.get("date"):
+            meta += f" · 日期:{d['date']}"
+        if d.get("url"):
+            meta += f" · 来源:{d['url']}"
+        parts.append(f"【资料{i + 1}】{meta}\n{d['text']}")
+
+    sp = f"""你是北京氢璞创能科技有限公司的企业知识助手。
+
+以下是公司产品参数、企业资料和官网新闻，请直接从其中提取答案：
+
+=== 资料开始 ===
 {chr(10).join(parts)}
-=== End ===
+=== 资料结束 ===
 
-Rules:
-1. Answer strictly based on references - do not fabricate
-2. If not covered, clearly state so
-3. Cite sources like [src 1], [src 2]
-4. Be concise, professional, well-organized
-5. If multiple questions are asked, answer each one separately with clear numbering
-3. Do NOT preface answers with phrases like "根据参考资料", "根据提供的材料" - answer directly
-4. Be concise, professional, well-organized
-5. If multiple questions are asked, answer each one separately with clear numbering
-6. Respond in Chinese"""
+回答要求：
+1. 涉及型号或参数时，必须全量列出所有型号，参数用表格或列表呈现，不得省略任何型号。
+2. 涉及时间或新闻时，明确给出日期、新闻标题和来源网址。
+3. 严禁说“根据参考资料”“根据提供的资料”等任何“根据...资料”的话，直接回答问题。
+4. 严禁输出 [src]、[1]、<cite> 之类的引用标记。
+5. 多个问题时逐条回答。
+6. 资料中没有的数据，直接说“资料未收录此项”，不得猜测或编造。
+7. 问优势时，列出资料中的技术、制造、市场、服务优势；问不足时，不得编造官方缺点，可基于资料中的参数差异做客观对比，并说明这是参数对比。
+8. 用中文回答。"""
+
     try:
         cli = OpenAI(api_key=api_key, base_url=base_url)
         msgs = [{"role": "system", "content": sp}]
@@ -396,7 +295,7 @@ Rules:
     except Exception as e:
         return None, f"API Error: {e}"
 
-kb = build_knowledge_base()
+kb = load_kb()
 
 # ---- UI: Title ----
 st.markdown(
@@ -430,15 +329,21 @@ with st.sidebar:
         else:
             with st.spinner('正在验证 API Key...'):
                 try:
-                    _, test_base, _ = get_api_config()
+                    _, test_base, test_model = get_api_config()
                     test_cli = OpenAI(api_key=current_key, base_url=test_base)
-                    test_cli.models.list()
+                    test_cli.chat.completions.create(
+                        model=test_model,
+                        messages=[{"role": "user", "content": "ping"}],
+                        max_tokens=1,
+                        temperature=0,
+                    )
                     st.session_state['_key_valid'] = True
                     st.session_state['_key_validated_key'] = current_key
                     key_valid = True
-                except Exception:
+                except Exception as _val_err:
                     st.session_state['_key_valid'] = False
                     st.session_state['_key_validated_key'] = ''
+                    st.session_state['_key_validate_error'] = str(_val_err)
     if key_valid:
         st.markdown(
             f'<div class="status-box status-ok">'
@@ -465,7 +370,7 @@ with st.sidebar:
     else:
         st.markdown(
             '<div class="status-box status-warn">'
-            '<i class="fa-solid fa-triangle-exclamation"></i> 未找到 PDF 文件</div>',
+            '<i class="fa-solid fa-triangle-exclamation"></i> 未找到知识库文件</div>',
             unsafe_allow_html=True
         )
 
@@ -507,14 +412,14 @@ if query:
         st.toast("知识库为空", icon=":material/error:")
         st.session_state.messages.append({
             "role": "assistant",
-            "content": "知识库为空，请检查 PDF 文件是否存在。"
+            "content": "知识库为空，请检查知识库文件是否存在。"
         })
     else:
         with st.spinner("正在检索..."):
             docs = search_kb(kb, query)
         if docs:
             with st.spinner("生成回答..."):
-                hist = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]]
+                hist = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[-3:-1]]
                 ans, err = generate_answer(query, docs, hist)
             if err:
                 st.toast(err, icon=":material/error:")
