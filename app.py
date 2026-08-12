@@ -277,14 +277,15 @@ def build_knowledge_base():
 
 def _parse_pdfs():
     docs = []
-    for p in sorted(PROJECT_DIR.glob("*.pdf")):
-        if p.name.startswith("00_"): continue
+    for p in sorted(PROJECT_DIR.glob("*.md")):
+        if p.name.upper() == "README.MD": continue
         try:
-            with pdfplumber.open(p) as pdf:
-                for i, page in enumerate(pdf.pages):
-                    t = (page.extract_text() or "").strip()
-                    if len(t) > 20:
-                        docs.append({"source": p.name, "page": i + 1, "text": t})
+            text = p.read_text(encoding="utf-8")
+            sections = re.split(r"\n(?=## )", text)
+            for si, section in enumerate(sections):
+                s = section.strip()
+                if len(s) > 30:
+                    docs.append({"source": p.name, "page": si + 1, "text": s})
         except:
             pass
     return docs
@@ -308,7 +309,10 @@ def _scrape_and_append(kb):
     import urllib.parse
     try:
         visited = set()
-        to_visit = [WEBSITE_URL]
+        to_visit = [
+            WEBSITE_URL,
+            WEBSITE_URL.rstrip("/") + "/h-col-104.html",  # 新闻中心
+        ]
         all_texts = []
         
         while to_visit and len(visited) < 20:
@@ -317,7 +321,7 @@ def _scrape_and_append(kb):
                 continue
             visited.add(url)
             try:
-                resp = requests.get(url, timeout=3, headers={"User-Agent": "Mozilla/5.0"})
+                resp = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
                 resp.encoding = resp.apparent_encoding or "utf-8"
                 soup = BeautifulSoup(resp.text, "html.parser")
                 
@@ -364,7 +368,7 @@ def generate_answer(query, ctx_docs, history):
     api_key, base_url, model = get_api_config()
     if not api_key:
         return None, "API Key not configured"
-    parts = [f"[src {i+1}] {d['source']} p.{d['page']}:\n{d['text']}" for i, d in enumerate(ctx_docs)]
+    parts = [f"{d['source']} p.{d['page']}:\n{d['text']}" for i, d in enumerate(ctx_docs)]
     sp = f"""You are an enterprise knowledge assistant for Beijing Hydrotrans Creative Energy Technology Co., Ltd.
 Answer user questions based on the provided reference materials.
 
@@ -376,6 +380,9 @@ Rules:
 1. Answer strictly based on references - do not fabricate
 2. If not covered, clearly state so
 3. Cite sources like [src 1], [src 2]
+4. Be concise, professional, well-organized
+5. If multiple questions are asked, answer each one separately with clear numbering
+3. Do NOT preface answers with phrases like "根据参考资料", "根据提供的材料" - answer directly
 4. Be concise, professional, well-organized
 5. If multiple questions are asked, answer each one separately with clear numbering
 6. Respond in Chinese"""
