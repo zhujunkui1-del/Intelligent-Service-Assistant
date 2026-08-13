@@ -13,14 +13,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ---- CSS & Dark Mode JS ----
+# ---- CSS (light-only) ----
 st.markdown("""
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
-    /* ========== 主题变量 ========== */
     :root {
+        --app-bg: #ffffff;
+        --sidebar-bg: #e2e9f1;
         --sidebar-border: #CBD5E1;
         --accent-color: #00B4D8;
+        --title-color: #0F4C82;
+        --app-title-color: #000000;
         --status-ok-bg: #ECFDF5;
         --status-ok-border: #6EE7B7;
         --status-ok-text: #065F46;
@@ -31,15 +34,34 @@ st.markdown("""
         --status-info-border: #93C5FD;
         --status-info-text: #1E40AF;
     }
-    
-    /* ========== 侧边栏 - 背景由 JS 完全控制 ========== */
+
+    /* Light-only appearance for Chrome/Edge consistency */
+    html, body {
+        color-scheme: light only;
+    }
+
+    /* Remove Streamlit default toolbar (Deploy / menu) */
+    header[data-testid="stHeader"],
+    .stAppHeader {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    [data-testid="stAppViewContainer"],
+    [data-testid="stMain"],
+    [data-testid="stMainBlockContainer"] {
+        background: var(--app-bg) !important;
+    }
+
+    /* ========== Sidebar ========== */
     section[data-testid="stSidebar"] {
+        background: var(--sidebar-bg) !important;
+        background-color: var(--sidebar-bg) !important;
+        background-image: none !important;
         border-right: none !important;
         box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
-        /* 不设置 background，全部交给 JS */
     }
-    
-    /* 侧边栏内部所有容器 - 设为透明，让外层颜色透出来 */
+
     section[data-testid="stSidebar"] > div,
     section[data-testid="stSidebar"] > div > div,
     section[data-testid="stSidebar"] > div > div > div,
@@ -52,27 +74,35 @@ st.markdown("""
         background-color: transparent !important;
         background-image: none !important;
     }
-    
-    /* ========== 标题（吸顶 + 对齐侧边栏） ========== */
-    :root { --app-bg: #ffffff; }
-    [data-theme="dark"] { --app-bg: #0e1117; }
 
+    section[data-testid="stSidebar"] h3 {
+        color: var(--title-color) !important;
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin-top: 1rem;
+    }
+    section[data-testid="stSidebar"] h3:first-of-type { margin-top: 0.4rem; }
+    section[data-testid="stSidebar"] label { margin-bottom: 0; padding-bottom: 0; }
+
+    section[data-testid="stSidebar"] hr {
+        border-color: var(--sidebar-border) !important;
+        margin: 0.4rem 0;
+    }
+
+    /* ========== Sticky title ========== */
     [data-testid="stMainBlockContainer"] {
         padding-top: 0.2rem !important;
     }
 
-    div.stMarkdown:has(.app-title) {
+    .app-title {
+        position: -webkit-sticky;
         position: sticky;
         top: 0;
         z-index: 60;
         background: var(--app-bg);
-        padding-top: 0.2rem;
-        padding-bottom: 0.2rem;
-        margin-bottom: 0.4rem;
-    }
-
-    .app-title {
+        color: var(--app-title-color) !important;
         margin: 0 !important;
+        padding-top: 0.2rem;
         border-bottom: 3px solid var(--accent-color) !important;
         padding-bottom: 0.4rem;
         font-size: 1.5rem;
@@ -80,31 +110,17 @@ st.markdown("""
     }
 
     .app-logo {
-        height: 1.7rem;
+        height: 1em;
         width: auto;
-        vertical-align: middle;
+        vertical-align: -0.12em;
         margin-right: 0.5rem;
     }
 
     .app-title i {
         color: var(--accent-color) !important;
     }
-    
-    /* ========== 侧边栏标题（颜色由 JS 控制） ========== */
-    section[data-testid="stSidebar"] h3 {
-        font-size: 0.95rem;
-        font-weight: 700;
-        margin-top: 1rem;
-    }
-    section[data-testid="stSidebar"] h3:first-of-type { margin-top: 0.4rem; }
-    section[data-testid="stSidebar"] label { margin-bottom: 0; padding-bottom: 0; }
-    
-    section[data-testid="stSidebar"] hr {
-        border-color: var(--sidebar-border) !important;
-        margin: 0.4rem 0;
-    }
-    
-    /* ========== 状态指示器 ========== */
+
+    /* ========== Status indicators ========== */
     .status-box {
         border-radius: 8px;
         padding: 0.4rem 0.65rem;
@@ -126,8 +142,8 @@ st.markdown("""
         border: 1px solid var(--status-info-border) !important;
         color: var(--status-info-text) !important;
     }
-    
-    /* ========== 聊天组件 ========== */
+
+    /* ========== Chat components ========== */
     [data-testid="stSidebarCollapseButton"] {
         display: none !important;
         visibility: hidden !important;
@@ -136,6 +152,12 @@ st.markdown("""
     [data-testid="stChatMessage"] {
         border-radius: 10px;
         padding: 0.4rem 0.8rem;
+        color: #000000 !important;
+    }
+    [data-testid="stChatMessage"] p,
+    [data-testid="stChatMessage"] span,
+    [data-testid="stChatMessage"] div {
+        color: #000000 !important;
     }
     .stChatMessage:first-of-type {
         margin-top: 5px;
@@ -151,90 +173,10 @@ st.markdown("""
         position: sticky;
         bottom: 0;
         z-index: 100;
-        background: inherit;
+        background: var(--app-bg) !important;
         padding-top: 0.5rem;
     }
-    
-    /* 深色模式聊天输入框 */
-    [data-theme="dark"] [data-testid="stChatInput"],
-    [data-theme="dark"] [data-testid="stChatInput"]:focus,
-    [data-theme="dark"] [data-testid="stChatInput"]:hover {
-        background: #0E1117 !important;
-    }
 </style>
-
-<script>
-(function() {
-    function fixSidebar() {
-        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        var sidebar = document.querySelector('section[data-testid="stSidebar"]');
-        if (!sidebar) return;
-        
-        // ---- 改背景（白天和深色都显式设置） ----
-        if (isDark) {
-            // 深色模式
-            sidebar.style.setProperty('background', '#2b3347', 'important');
-            sidebar.style.setProperty('background-color', '#2b3347', 'important');
-            sidebar.style.setProperty('background-image', 'none', 'important');
-        } else {
-            // 白天模式
-            sidebar.style.setProperty('background', '#e2e9f1', 'important');
-            sidebar.style.setProperty('background-color', '#e2e9f1', 'important');
-            sidebar.style.setProperty('background-image', 'none', 'important');
-        }
-        
-        // 让所有子容器透明
-        var children = sidebar.querySelectorAll('div');
-        for (var i = 0; i < children.length; i++) {
-            children[i].style.setProperty('background', 'transparent', 'important');
-            children[i].style.setProperty('background-color', 'transparent', 'important');
-            children[i].style.setProperty('background-image', 'none', 'important');
-        }
-        
-        var sc = document.querySelector('[data-testid="stSidebarContent"]');
-        if (sc) {
-            sc.style.setProperty('background', 'transparent', 'important');
-            sc.style.setProperty('background-color', 'transparent', 'important');
-            sc.style.setProperty('background-image', 'none', 'important');
-        }
-        
-        // ---- 改文字颜色 ----
-        var title = document.querySelector('.app-title');
-        var headings = document.querySelectorAll('section[data-testid="stSidebar"] h3');
-        
-        if (isDark) {
-            // 夜间模式：纯白色
-            if (title) title.style.setProperty('color', '#FFFFFF', 'important');
-            for (var i = 0; i < headings.length; i++) {
-                headings[i].style.setProperty('color', '#FFFFFF', 'important');
-            }
-        } else {
-            // 白天模式：深蓝色 #0F4C82
-            if (title) title.style.setProperty('color', '#0F4C82', 'important');
-            for (var i = 0; i < headings.length; i++) {
-                headings[i].style.setProperty('color', '#0F4C82', 'important');
-            }
-        }
-    }
-    
-    // 监听 data-theme 变化（事件驱动，不轮询）
-    var observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(m) {
-            if (m.attributeName === 'data-theme') {
-                fixSidebar();
-            }
-        });
-    });
-    observer.observe(document.documentElement, { attributes: true });
-    
-    // DOM加载完成后执行
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', fixSidebar);
-    } else {
-        fixSidebar();
-    }
-})();
-</script>
 """, unsafe_allow_html=True)
 
 
