@@ -29,12 +29,24 @@ LOCAL_CASES = [
     ("500公里以上氢能重卡的经济性优势？", ["500公里", "15%-20%"]),
     ("CESP1000 的额定产氢量和氢气纯度？", ["CESP1000", "1000Nm³/h", "99.999%"]),
     ("氢璞有哪些核心技术优势？", ["专利108项", "首条电堆自动化产线"]),
+    ("氢璞创能面临哪些行业痛点？", ["氢燃料电池成本高", "加氢站", "行业标准体系"]),
+    ("可口可乐华北区氢能物流试运营是什么时候？", ["2025年4月", "可口可乐", "600km"]),
+    ("氢璞有几代电堆？", ["第四代", "第五代", "第六代", "第七代"]),
+    (
+        "第四代、第五代、第七代碳复合板电堆分别有哪些型号？",
+        ["ST35F", "ST97V", "ST600V/IIA"],
+    ),
+    ("第三代金属板电堆有哪些参数？", ["自主研发三代金属板电堆"]),
 ]
 
-WEB_CASE = (
-    "氢璞创能发布200kW船舶用燃料电池系统 OCEAN-200 是什么时候？",
-    ["2024", "OCEAN-200"],
-)
+WEB_CASES = [
+    (
+        "氢璞创能发布200kW船舶用燃料电池系统 OCEAN-200 是什么时候？",
+        ["2024", "OCEAN-200"],
+    ),
+    ("氢璞上过央视吗？", ["h-nd-31", "央视"]),
+    ("氢璞官网最早的新闻是什么？", ["h-nd-18", "2020-10-15"]),
+]
 
 
 def combined_text(results):
@@ -46,7 +58,7 @@ def run_local(kb):
     assert len(kb["chunks"]) >= 200, f"本地片段数不足 200，当前 {len(kb['chunks'])}"
     print(f"  chunks={len(kb['chunks'])}")
 
-    print("\n[2] 本地检索 10 条")
+    print(f"\n[2] 本地检索 {len(LOCAL_CASES)} 条")
     passed = 0
     for idx, (query, expected) in enumerate(LOCAL_CASES, 1):
         t0 = time.perf_counter()
@@ -75,16 +87,16 @@ def run_crawl(kb):
         if kb.get("web_count", 0) == 0:
             print("  SKIP 新闻用例：官网抓取未获得有效页面")
             return False
-        query, expected = WEB_CASE
-        results = kb_engine.search_kb(kb, query)
-        text = combined_text(results)
-        missing = [term for term in expected if term not in text]
-        if missing:
-            print(f"  FAIL {query} 缺少 {missing}")
-            for d in results[:3]:
-                print("    top:", d["text"][:160])
-            raise AssertionError(f"新闻用例未命中: {missing}")
-        print(f"  PASS {query}")
+        for query, expected in WEB_CASES:
+            results = kb_engine.search_kb(kb, query)
+            text = combined_text(results)
+            missing = [term for term in expected if term not in text]
+            if missing:
+                print(f"  FAIL {query} 缺少 {missing}")
+                for d in results[:3]:
+                    print("    top:", d["text"][:160])
+                raise AssertionError(f"新闻用例未命中: {missing}")
+            print(f"  PASS {query}")
         return True
     except Exception as exc:
         print(f"  SKIP 新闻用例：{exc}")

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -45,11 +46,20 @@ SECTION_ALIASES = {
     "大事记": "企业大事记",
     "储能": "氢璞数字化平台与储能解决方案",
     "交通": "氢能源交通解决方案",
-    "优势": "核心能力",
+    "经济性": "氢能源交通解决方案",
+    "氢能重卡": "氢能源交通解决方案",
+    "优势": ["核心能力", "企业介绍"],
+    "痛点": ["一、行业说明", "三、业务流程图"],
+    "现有问题": "一、行业说明",
+    "金属板电堆": ["金属电堆", "企业介绍"],
 }
 
 PARTNER_TERMS = ("合作伙伴", "合作企业", "伙伴", "客户", "整车厂", "系统集成商")
-NEWS_TERMS = ("新闻", "发布", "哪一年", "什么时候", "何时", "报道", "官网")
+NEWS_TERMS = ("新闻", "发布", "哪一年", "什么时候", "何时", "报道", "官网", "央视", "东方时空", "最早", "媒体", "h-nd")
+NEWS_TIME_TERMS = ("最早", "第一条", "首发", "首次", "第一")
+CCTV_TERMS = ("央视", "东方时空")
+GENERATION_RE = re.compile(r"第[一二三四五六七八九十百]+代")
+CARBON_GENERATIONS = ("第四代", "第五代", "第六代", "第七代")
 
 
 def _clean(s: str) -> str:
@@ -336,10 +346,20 @@ def build_local_kb(project_dir: Optional[Path] = None) -> Dict[str, Any]:
     return kb
 
 
+def _crawl_loop(kb: Dict[str, Any], interval: int = 600) -> None:
+    """后台循环：立即抓取一次，之后每隔 interval 秒增量刷新，拾取官网新增新闻。"""
+    while True:
+        try:
+            crawl_website(kb)
+        except Exception:
+            pass
+        time.sleep(interval)
+
+
 def build_knowledge_base(project_dir: Optional[Path] = None) -> Dict[str, Any]:
-    """构建本地 KB 并启动后台官网抓取。"""
+    """构建本地 KB 并启动后台官网抓取（含周期增量刷新）。"""
     kb = build_local_kb(project_dir)
-    threading.Thread(target=crawl_website, args=(kb,), daemon=True).start()
+    threading.Thread(target=_crawl_loop, args=(kb,), daemon=True).start()
     return kb
 
 
@@ -429,15 +449,71 @@ def _web_page_chunks(page: Dict[str, str], index: int) -> List[Dict[str, Any]]:
     return chunks[:20]
 
 
+def _discover_news_urls() -> List[str]:
+    """从新闻中心页（含分页）抓取全部新闻文章链接，失败时回退到已知文章 ID。"""
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    def ids_from(url: str) -> set[str]:
+        try:
+            resp = requests.get(url, timeout=8, headers=headers)
+            if resp.status_code != 200:
+                return set()
+            resp.encoding = resp.apparent_encoding or "utf-8"
+            soup = BeautifulSoup(resp.text, "html.parser")
+            ids: set[str] = set()
+            for a in soup.find_all("a", href=True):
+                m = re.search(r"/h-nd-(\d+)\.html", a["href"])
+                if m:
+                    ids.add(m.group(1))
+            return ids
+        except Exception:
+            return set()
+
+    try:
+        first = NEWS_LIST_URL
+        resp = requests.get(first, timeout=8, headers=headers)
+        if resp.status_code == 200:
+            resp.encoding = resp.apparent_encoding or "utf-8"
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            all_ids: set[str] = set()
+            for a in soup.find_all("a", href=True):
+                m = re.search(r"/h-nd-(\d+)\.html", a["href"])
+                if m:
+                    all_ids.add(m.group(1))
+
+            pagers: Dict[str, set[int]] = {}
+            for a in soup.find_all("a", href=True):
+                m = re.search(r"([A-Za-z0-9]+)page=(\d+)", a["href"])
+                if m:
+                    pagers.setdefault(m.group(1), set()).add(int(m.group(2)))
+
+            for module, pages in pagers.items():
+                for pg in sorted(pages):
+                    if pg <= 1:
+                        continue
+                    all_ids |= ids_from(NEWS_LIST_URL + f"?{module}page={pg}")
+
+            if all_ids:
+                return [WEBSITE_URL + f"/h-nd-{i}.html" for i in sorted(all_ids, key=lambda x: int(x))]
+    except Exception:
+        pass
+    return [WEBSITE_URL + f"/h-nd-{i}.html" for i in NEWS_ARTICLE_IDS]
+
+
 def crawl_website(kb: Dict[str, Any]) -> Dict[str, Any]:
     """抓取官网并追加到 KB。失败静默跳过，绝不阻塞主页面。"""
-    urls = [WEBSITE_URL, NEWS_LIST_URL] + [
-        WEBSITE_URL + f"/h-nd-{i}.html" for i in NEWS_ARTICLE_IDS
-    ]
+    urls = [WEBSITE_URL, NEWS_LIST_URL] + _discover_news_urls()
+    seen_urls: set[str] = set()
+    ordered_urls: List[str] = []
+    for u in urls:
+        if u not in seen_urls:
+            seen_urls.add(u)
+            ordered_urls.append(u)
 
     pages: List[Dict[str, str]] = []
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(_parse_web_page, url): url for url in urls}
+        futures = {pool.submit(_parse_web_page, url): url for url in ordered_urls}
         for future in as_completed(futures):
             page = future.result()
             if page:
@@ -498,7 +574,8 @@ def _boost_score(meta: Dict[str, Any], text: str, query: str) -> float:
     section = str(meta.get("section", ""))
     for alias, canonical in SECTION_ALIASES.items():
         if alias.lower() in query.lower():
-            if canonical in section or canonical in text:
+            targets = canonical if isinstance(canonical, list) else [canonical]
+            if any(target in section or target in text for target in targets):
                 bonus += 0.8
                 break
 
@@ -508,6 +585,59 @@ def _boost_score(meta: Dict[str, Any], text: str, query: str) -> float:
         bonus += 1.5
     return bonus
 
+
+def _is_web(meta: Dict[str, Any]) -> bool:
+    return bool(meta.get("url")) or meta.get("section") == "官网新闻"
+
+
+def _deterministic_head(kb: Dict[str, Any], query: str, ordered: List[int]) -> List[int]:
+    """确定性兜底：把用户关心的型号清单/官网新闻提到最前，避免被 TF-IDF 排序淹没。"""
+    q = query
+    gens = GENERATION_RE.findall(q)
+    model_intent = any(t in q for t in ("型号", "哪些", "什么型号", "几代", "哪几代", "列出", "全部"))
+
+    if model_intent and ("电堆" in q or "堆" in q or gens):
+        gen_hits: List[int] = []
+        if gens:
+            for kind in ("model_list", "table", "sentence", "overview"):
+                for g in gens:
+                    for i in ordered:
+                        meta = kb["metadatas"][i]
+                        if g in str(meta.get("section", "")) and meta.get("kind") == kind and i not in gen_hits:
+                            gen_hits.append(i)
+        else:
+            # “有几代/哪几代电堆”：按代次顺序给出各代型号清单，再给“七代碳复合板 + 三代金属板”总结句。
+            for g in CARBON_GENERATIONS:
+                for i in ordered:
+                    meta = kb["metadatas"][i]
+                    if meta.get("kind") == "model_list" and g in str(meta.get("section", "")) and i not in gen_hits:
+                        gen_hits.append(i)
+            for i in ordered:
+                text = kb["chunks"][i]
+                if ("七代碳复合板" in text and "金属板" in text) or ("三代金属板电堆" in text and "碳复合板" in text):
+                    if i not in gen_hits:
+                        gen_hits.append(i)
+        if gen_hits:
+            return gen_hits
+
+    is_news = any(t in q for t in NEWS_TERMS)
+    if is_news:
+        cctv = any(t in q for t in CCTV_TERMS)
+        time_q = any(t in q for t in NEWS_TIME_TERMS)
+        web: List[int] = []
+        for i in ordered:
+            meta = kb["metadatas"][i]
+            if not _is_web(meta):
+                continue
+            if cctv and not any(t in kb["chunks"][i] for t in CCTV_TERMS):
+                continue
+            web.append(i)
+        if time_q:
+            web.sort(key=lambda i: (not (kb["metadatas"][i].get("date") or ""), kb["metadatas"][i].get("date") or ""))
+        if web:
+            return web[:5]
+
+    return []
 
 def search_kb(kb: Dict[str, Any], query: str, k: int = 12) -> List[Dict[str, Any]]:
     if kb.get("vectorizer") is None or not kb.get("chunks"):
@@ -522,10 +652,19 @@ def search_kb(kb: Dict[str, Any], query: str, k: int = 12) -> List[Dict[str, Any
             for i, score in enumerate(scores)
         ]
     )
-    top = np.argsort(boosted)[-k:][::-1]
+    ordered = list(np.argsort(boosted)[::-1])
+
+    head = _deterministic_head(kb, query, ordered)
+    seen: set[int] = set(head)
+    final_idx = list(head)
+    for i in ordered:
+        if i not in seen:
+            final_idx.append(i)
 
     results: List[Dict[str, Any]] = []
-    for i in top:
+    for i in final_idx:
+        if len(results) >= k:
+            break
         if scores[i] <= 0 and boosted[i] <= 0:
             continue
         meta = kb["metadatas"][i]

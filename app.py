@@ -1,4 +1,8 @@
-﻿import streamlit as st
+﻿import base64
+import re
+from pathlib import Path
+
+import streamlit as st
 from openai import OpenAI
 from kb_engine import build_knowledge_base, search_kb
 
@@ -49,19 +53,39 @@ st.markdown("""
         background-image: none !important;
     }
     
-    /* ========== 标题（颜色由 JS 控制） ========== */
-    .app-title {
+    /* ========== 标题（吸顶 + 对齐侧边栏） ========== */
+    :root { --app-bg: #ffffff; }
+    [data-theme="dark"] { --app-bg: #0e1117; }
+
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 0.2rem !important;
+    }
+
+    div.stMarkdown:has(.app-title) {
         position: sticky;
         top: 0;
-        z-index: 50;
-        background: inherit;
+        z-index: 60;
+        background: var(--app-bg);
+        padding-top: 0.2rem;
+        padding-bottom: 0.2rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .app-title {
+        margin: 0 !important;
         border-bottom: 3px solid var(--accent-color) !important;
         padding-bottom: 0.4rem;
-        margin-bottom: 0.5rem;
         font-size: 1.5rem;
         font-weight: 800;
     }
-    
+
+    .app-logo {
+        height: 1.7rem;
+        width: auto;
+        vertical-align: middle;
+        margin-right: 0.5rem;
+    }
+
     .app-title i {
         color: var(--accent-color) !important;
     }
@@ -227,6 +251,7 @@ def init_session():
         "provider": "DeepSeek",
         "messages": [],
         "pending_question": None,
+        "busy": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -251,6 +276,26 @@ def load_kb():
     return build_knowledge_base()
 
 # ---- Chat ----
+_URL_RE = re.compile(r"(?<![\w\[(<])(https?://[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+)")
+
+
+def _fix_links(text: str) -> str:
+    """把裸网址包成 <url> 并在其后补空格，避免 Streamlit 把网址后的中文/标点吞进链接。"""
+    if not text:
+        return text
+    out = []
+    pos = 0
+    for m in _URL_RE.finditer(text):
+        url = m.group(1).rstrip(".,;:!?")
+        out.append(text[pos:m.start()])
+        out.append(f"<{url}>")
+        if m.end() < len(text) and not text[m.end()].isspace() and text[m.end()] not in ".,;:!?。，；：！？、)）】]":
+            out.append(" ")
+        pos = m.end()
+    out.append(text[pos:])
+    return "".join(out)
+
+
 def generate_answer(query, ctx_docs, history):
     api_key, base_url, model = get_api_config()
     if not api_key:
@@ -278,12 +323,22 @@ def generate_answer(query, ctx_docs, history):
 回答要求：
 1. 涉及型号或参数时，必须全量列出所有型号，参数用表格或列表呈现，不得省略任何型号。
 2. 涉及时间或新闻时，明确给出日期、新闻标题和来源网址。
-3. 严禁说“根据参考资料”“根据提供的资料”等任何“根据...资料”的话，直接回答问题。
+3. 严禁“根据”、“资料”这两个词出现在回答中，禁止使用“资料显示”、“根据资料”等措辞。
 4. 严禁输出 [src]、[1]、<cite> 之类的引用标记。
 5. 多个问题时逐条回答。
-6. 资料中没有的数据，直接说“资料未收录此项”，不得猜测或编造。
+6. 资料中没有的数据，尝试在"https://www.nowogen.com/h-col-104.html"下的新闻页查找，仍旧找不到，直接说“很抱歉，我目前尚不了解...，您可前往官网或联系人工客服获取更多信息”，严禁猜测或编造。
 7. 问优势时，列出资料中的技术、制造、市场、服务优势；问不足时，不得编造官方缺点，可基于资料中的参数差异做客观对比，并说明这是参数对比。
-8. 用中文回答。"""
+8. 用中文回答。
+9. 禁止决策与报价：绝不提供具体折扣、成交价或代替用户做最终决定。
+10. 禁止竞品攻击：若被问及竞品对比，统一回复：“我们更关注自身产品的迭代，详情请参考官方说明书。”
+11. 安全过滤：拒绝回答涉政、涉黄、歧视及与业务无关的话题。
+12. 转人工条件：当用户情绪激动或连续3次提问未命中知识库时，主动提供转人工入口。
+13. 语气控制：使用专业、客观、平实的书面语，禁用表情包、网络流行语和夸张修辞。
+16. 输出网址时，网址末尾与后续文字之间必须保留一个空格，避免网址后面的中文或标点被吞进链接。
+14. 用户问第X代电堆型号时，必须完整列出该代全部型号后再展开参数；问“有几代/哪几代电堆”时，按碳复合板电堆第四至第七代分代列出，并说明资料另提到“自主研发三代金属板电堆”（未收录各代金属板电堆的具体型号参数）。
+15. 关于金属板电堆：资料仅写明“自主研发三代金属板电堆”，未收录任何一代金属板电堆的具体型号与参数；禁止编造“第三代金属板电堆”或其他代次的参数。
+16. 输出url网址时，网址末尾与后续文字之间必须保留一个空格，避免网址后面的中文或标点被吞进链接。
+"""
 
     try:
         cli = OpenAI(api_key=api_key, base_url=base_url)
@@ -291,18 +346,37 @@ def generate_answer(query, ctx_docs, history):
         msgs.extend(history[-6:])
         msgs.append({"role": "user", "content": query})
         resp = cli.chat.completions.create(model=model, messages=msgs, temperature=0.3, max_tokens=1500)
-        return resp.choices[0].message.content, None
+        return _fix_links(resp.choices[0].message.content or ""), None
     except Exception as e:
         return None, f"API Error: {e}"
 
 kb = load_kb()
 
 # ---- UI: Title ----
-st.markdown(
-    '<h1 class="app-title"><i class="fa-solid fa-bolt"></i> '
-    '氢璞创能 · 企业知识与智能服务助手</h1>',
-    unsafe_allow_html=True
-)
+def _logo_data_uri() -> str:
+    try:
+        logo = Path(__file__).parent / "素材" / "logo.png"
+        data = logo.read_bytes()
+        mime = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
+        b64 = base64.b64encode(data).decode("ascii")
+        return f"data:{mime};base64,{b64}"
+    except Exception:
+        return ""
+
+
+logo_uri = _logo_data_uri()
+if logo_uri:
+    st.markdown(
+        f'<h1 class="app-title"><img class="app-logo" src="{logo_uri}" alt="氢璞创能 logo"> '
+        '氢璞创能 · 企业知识与智能服务助手</h1>',
+        unsafe_allow_html=True
+    )
+else:
+    st.markdown(
+        '<h1 class="app-title"><i class="fa-solid fa-bolt"></i> '
+        '氢璞创能 · 企业知识与智能服务助手</h1>',
+        unsafe_allow_html=True
+    )
 
 # ---- Sidebar ----
 with st.sidebar:
@@ -383,8 +457,9 @@ with st.sidebar:
         "请介绍一下氢璞的核心技术路线",
         "氢璞的产品应用在哪些场景?",
     ]:
-        if st.button(q, key=f"s_{abs(hash(q))}", use_container_width=True):
-            st.session_state.pending_question = q
+        if st.button(q, key=f"s_{abs(hash(q))}", use_container_width=True, disabled=st.session_state.busy):
+            if st.session_state.pending_question is None:
+                st.session_state.pending_question = q
 
 
 # ---- Chat ----
@@ -392,11 +467,12 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-chat_val = st.chat_input("请输入您的问题...")
+chat_val = st.chat_input("请输入您的问题...", disabled=st.session_state.busy)
 pending = st.session_state.pop("pending_question", None)
 query = pending or chat_val
 
-if query:
+if query and not st.session_state.busy:
+    st.session_state.busy = True
     with st.chat_message("user"):
         st.markdown(query)
     st.session_state.messages.append({"role": "user", "content": query})
@@ -431,7 +507,7 @@ if query:
                         st.markdown(
                             f'<p style="margin:0.2rem 0;font-size:0.85rem;">'
                             f'<i class="fa-solid fa-link"></i> '
-                            f'<strong>[来源{i+1}]</strong> {d["source"]} · 第{d["page"]}页</p>',
+                            f'<strong>来源 {i+1}</strong> {d["source"]} · 第{d["page"]}页</p>',
                             unsafe_allow_html=True
                         )
                         st.text(d["text"][:250] + ("..." if len(d["text"]) > 250 else ""))
@@ -441,4 +517,5 @@ if query:
                 "role": "assistant",
                 "content": "未找到相关内容，请尝试换个问法。"
             })
+    st.session_state.busy = False
     st.rerun()
