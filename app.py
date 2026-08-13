@@ -182,9 +182,79 @@ st.markdown("""
         background: var(--app-bg) !important;
         padding-top: 0.5rem;
     }
+
+    /* Provider logos in selectbox */
+    .provider-logo {
+        height: 1em;
+        width: auto;
+        vertical-align: -0.1em;
+        margin-right: 0.35rem;
+        display: inline-block;
+    }
+    [role="option"] {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5rem !important;
+    }
+    [data-testid="stSelectbox"] [data-provider-logo-added] {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
+def _provider_logo_uri(filename):
+    try:
+        data = (Path(__file__).parent / "素材" / filename).read_bytes()
+        mime = "image/jpeg" if data[:3] == b"\xff\xd8\xff" else "image/png"
+        return "data:" + mime + ";base64," + base64.b64encode(data).decode("ascii")
+    except Exception:
+        return ""
+
+
+deepseek_logo_uri = _provider_logo_uri("DeepSeek Icon - Colored.png")
+openai_logo_uri = _provider_logo_uri("ChatGPT Logo - Black.png")
+
+_provider_logo_css = """
+<style>
+    /* Selected provider value shown in the closed selectbox */
+    [data-testid="stSelectbox"] input[value="DeepSeek"] {
+        background-image: url("__DEEPSEEK_LOGO__");
+        background-repeat: no-repeat !important;
+        background-position: 0.4em 50% !important;
+        background-size: 1em auto !important;
+        padding-left: 1.6em !important;
+    }
+    [data-testid="stSelectbox"] input[value="OpenAI"] {
+        background-image: url("__OPENAI_LOGO__");
+        background-repeat: no-repeat !important;
+        background-position: 0.4em 50% !important;
+        background-size: 1em auto !important;
+        padding-left: 1.6em !important;
+    }
+
+    /* Provider options in the open dropdown */
+    [data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-posinset="1"] {
+        background-image: url("__DEEPSEEK_LOGO__");
+        background-repeat: no-repeat !important;
+        background-position: 0.4em 50% !important;
+        background-size: 1em auto !important;
+        padding-left: 1.6em !important;
+    }
+    [data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-posinset="2"] {
+        background-image: url("__OPENAI_LOGO__");
+        background-repeat: no-repeat !important;
+        background-position: 0.4em 50% !important;
+        background-size: 1em auto !important;
+        padding-left: 1.6em !important;
+    }
+</style>
+"""
+
+_provider_logo_css = _provider_logo_css.replace("__DEEPSEEK_LOGO__", deepseek_logo_uri)
+_provider_logo_css = _provider_logo_css.replace("__OPENAI_LOGO__", openai_logo_uri)
+st.markdown(_provider_logo_css, unsafe_allow_html=True)
 
 PROVIDERS = {
     "DeepSeek": {"base": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
@@ -329,10 +399,20 @@ else:
 # ---- Sidebar ----
 with st.sidebar:
     st.markdown('<h3><i class="fa-solid fa-gear"></i> 设置</h3>', unsafe_allow_html=True)
-    st.session_state.provider = st.selectbox(
-        "LLM 提供商", ["DeepSeek", "OpenAI"],
-        index=0 if st.session_state.provider == "DeepSeek" else 1
+    # 正确双向绑定写法
+    provider_options = ["DeepSeek", "OpenAI"]
+    # 根据当前session值找到正确索引
+    selected_idx = provider_options.index(st.session_state.provider)
+    new_provider = st.selectbox(
+        "LLM 提供商",
+        provider_options,
+        index=selected_idx
     )
+    # 只有值发生变化才写入session，避免反复刷新
+    if new_provider != st.session_state.provider:
+        st.session_state.provider = new_provider
+        st.rerun()
+
     if st.session_state.provider == "DeepSeek":
         st.session_state.api_key = st.text_input(
             "DeepSeek API Key", type="password", value=st.session_state.api_key,
