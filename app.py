@@ -249,6 +249,36 @@ _provider_logo_css = """
         background-size: 1em auto !important;
         padding-left: 1.6em !important;
     }
+        /* ========== 聊天输入框：仿豆包光影样式 ========== */
+    [data-testid="stChatInput"] {
+        position: sticky;
+        bottom: 0;
+        z-index: 100;
+        background: var(--app-bg) !important;
+        padding-top: 0.5rem;
+    }
+    /* 输入框外层容器 */
+    [data-testid="stChatInput"] > div {
+        border: none !important;
+        border-radius: 24px !important;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08) !important;
+        transition: box-shadow 0.22s ease-out !important;
+        background: #ffffff !important;
+    }
+    /* 激活/聚焦状态：蓝色向外渐变光晕 */
+    [data-testid="stChatInput"] > div:focus-within {
+        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.10), 0 0 0 2px rgba(0,180,216,0.25), 0 0 18px 6px rgba(0,180,216,0.18) !important;
+    }
+    /* 清除原生自带边框 */
+    [data-testid="stChatInput"] textarea {
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stChatInput"] textarea:focus {
+        outline: none !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
 </style>
 """
 
@@ -386,13 +416,13 @@ logo_uri = _logo_data_uri()
 if logo_uri:
     st.markdown(
         f'<h1 class="app-title"><img class="app-logo" src="{logo_uri}" alt="氢璞创能 logo"> '
-        '<span>氢璞创能 · 企业知识与智能服务助手</span></h1>',   # ← 加 <span>
+        '<span>氢璞创能 · 企业知识与智能服务助手</span></h1>',
         unsafe_allow_html=True
     )
 else:
     st.markdown(
         '<h1 class="app-title"><i class="fa-solid fa-bolt"></i> '
-        '<span>氢璞创能 · 企业知识与智能服务助手</span></h1>',   # ← 加 <span>
+        '<span>氢璞创能 · 企业知识与智能服务助手</span></h1>',
         unsafe_allow_html=True
     )
 
