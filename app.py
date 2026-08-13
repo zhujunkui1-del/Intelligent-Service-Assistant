@@ -120,6 +120,12 @@ st.markdown("""
         color: var(--accent-color) !important;
     }
 
+    /* Keep logo fixed; shift title text down 2px */
+    .app-title span {
+        position: relative;
+        top: 5px;
+    }
+
     /* ========== Status indicators ========== */
     .status-box {
         border-radius: 8px;
@@ -310,13 +316,13 @@ logo_uri = _logo_data_uri()
 if logo_uri:
     st.markdown(
         f'<h1 class="app-title"><img class="app-logo" src="{logo_uri}" alt="氢璞创能 logo"> '
-        '氢璞创能 · 企业知识与智能服务助手</h1>',
+        '<span>氢璞创能 · 企业知识与智能服务助手</span></h1>',   # ← 加 <span>
         unsafe_allow_html=True
     )
 else:
     st.markdown(
         '<h1 class="app-title"><i class="fa-solid fa-bolt"></i> '
-        '氢璞创能 · 企业知识与智能服务助手</h1>',
+        '<span>氢璞创能 · 企业知识与智能服务助手</span></h1>',   # ← 加 <span>
         unsafe_allow_html=True
     )
 
