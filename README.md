@@ -64,3 +64,6 @@ Intelligent Service Assistant/
 ├── 02（已压缩）氢璞2025宣传册（0905）-解决方案全.md
 └── 03 氢璞创能氢能产业商机.md
 ```
+
+## 测试网站
+该项目已在Streamlit上线：https://intelligent-service-assistant-ajekavvfmxgzqdqzybnf9n.streamlit.app/
