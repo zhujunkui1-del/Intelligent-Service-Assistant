@@ -172,9 +172,12 @@ st.markdown("""
     section[data-testid="stSidebar"] .stButton > button {
         border-radius: 6px;
         font-size: 0.82rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        white-space: normal !important; /* 核心：取消单行限制，自动换行 */
+        overflow: visible !important;
+        text-overflow: unset !important;
+        line-height: 1.45; /* 行高，避免文字挤在一起 */
+        text-align: left; /* 文字左对齐，更美观 */
+        padding: 0.6rem 0.7rem !important; /* 增加上下内边距，多行不拥挤 */
     }
     [data-testid="stChatInput"] {
         position: sticky;
