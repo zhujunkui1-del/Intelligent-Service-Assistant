@@ -4,7 +4,7 @@
 
 ## 功能💻
 
-- 启动时自动读取两份 Markdown 资料并构建本地知识库。
+- 启动时自动读取三份 Markdown 资料并构建本地知识库。
 - 后台抓取官网新闻，新闻片段附带标题、日期和来源 URL。
 - 支持 DeepSeek 与 OpenAI 双提供商切换。
 - 型号、参数、大事记、合作伙伴、新闻出处等查询有定向检索增强。
@@ -51,13 +51,15 @@ python test_kb.py --crawl --with-llm
 ## 项目结构⬜
 
 ```text
-t01-hydrogen-assistant/
+Intelligent Service Assistant/
 ├── app.py                 # Streamlit 主程序
 ├── kb_engine.py           # Markdown 解析、TF-IDF 检索、官网抓取
 ├── test_kb.py             # 自测脚本
 ├── requirements.txt       # Python 依赖
 ├── README.md
 ├── .gitignore
+├── .streamlit/config.toml
+├── 素材/
 ├── 01 氢璞2025产品单页（1023）校正稿.md
 ├── 02（已压缩）氢璞2025宣传册（0905）-解决方案全.md
 └── 03 氢璞创能氢能产业商机.md
