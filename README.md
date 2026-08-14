@@ -1,6 +1,7 @@
 # 氢璞创能 · 企业知识与智能服务助手🤖
 
 基于本地稀疏检索与 LLM 的 RAG 企业知识库问答系统。知识来源包括氢璞创能的产品资料、企业宣传册和官网新闻。
+![demo]["C:\Users\zhuju\Desktop\黑客松\Intelligent Service Assistant\素材\show.png"]
 
 ## 功能💻
 
@@ -65,5 +66,5 @@ Intelligent Service Assistant/
 └── 03 氢璞创能氢能产业商机.md
 ```
 
-## 测试网站
+## 项目网站
 该项目已在Streamlit上线：https://intelligent-service-assistant-ajekavvfmxgzqdqzybnf9n.streamlit.app/
