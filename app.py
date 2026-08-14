@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 from openai import OpenAI
 from kb_engine import build_knowledge_base, search_kb
+import streamlit.components.v1 as components
 
 st.set_page_config(
     page_title="氢璞创能 · 智能知识助手",
@@ -183,6 +184,12 @@ st.markdown("""
         padding-top: 0.5rem;
     }
 
+    /* Disable Streamlit sidebar drag-to-resize handle */
+    [data-testid="stSidebar"] div[style*="cursor: col-resize"] {
+        display: none !important;
+        pointer-events: none !important;
+    }
+
     /* Provider logos in selectbox */
     .provider-logo {
         height: 1em;
@@ -284,7 +291,123 @@ _provider_logo_css = """
 
 _provider_logo_css = _provider_logo_css.replace("__DEEPSEEK_LOGO__", deepseek_logo_uri)
 _provider_logo_css = _provider_logo_css.replace("__OPENAI_LOGO__", openai_logo_uri)
-st.markdown(_provider_logo_css, unsafe_allow_html=True)
+
+
+_sidebar_toggle_js = r"""
+<script>
+(function () {
+  var parentDoc = window.parent.document;
+  var parentWin = window.parent;
+  var TOGGLE_ID = 'custom-sidebar-toggle';
+  var STYLE_ID = 'custom-sidebar-toggle-style';
+
+  function getSidebar() {
+    return parentDoc.querySelector('[data-testid="stSidebar"]');
+  }
+
+  function isExpanded() {
+    var s = getSidebar();
+    return !!s && s.getAttribute('aria-expanded') === 'true';
+  }
+
+  function toggle() {
+    var btn = parentDoc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+    if (btn) {
+      btn.click();
+      setTimeout(sync, 300);
+    }
+  }
+
+  function getMainLeft() {
+    var m = parentDoc.querySelector('[data-testid="stAppScrollToBottomContainer"]') ||
+            parentDoc.querySelector('.stMain');
+    if (!m) return 12;
+    var rect = m.getBoundingClientRect();
+    return Math.max(0, rect.left) + 12;
+  }
+
+  function ensureStyles() {
+    if (parentDoc.getElementById(STYLE_ID)) return;
+    var style = parentDoc.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = [
+      '.sidebar-toggle-btn{position:fixed!important;top:14px!important;width:42px!important;height:42px!important;border-radius:12px!important;background:#ffffff!important;border:1px solid rgba(15,76,130,0.18)!important;box-shadow:0 2px 12px rgba(0,0,0,0.12)!important;z-index:1000000!important;display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer!important;padding:0!important;margin:0!important}',
+      '.sidebar-toggle-btn:hover{box-shadow:0 3px 16px rgba(0,0,0,0.16),0 0 0 2px rgba(0,180,216,0.2)!important}',
+      '.sidebar-toggle-btn svg{width:22px;height:22px;fill:#0F4C82}',
+      '[data-testid="stAppScrollToBottomContainer"]{touch-action:pan-y!important}',
+      'html,body{overscroll-behavior-x:none}'
+    ].join('');
+    (parentDoc.head || parentDoc.documentElement).appendChild(style);
+  }
+
+  function ensureButton() {
+    ensureStyles();
+    if (!parentDoc.body) return;
+    var btn = parentDoc.getElementById(TOGGLE_ID);
+    if (!btn) {
+      btn = parentDoc.createElement('button');
+      btn.id = TOGGLE_ID;
+      btn.type = 'button';
+      btn.className = 'sidebar-toggle-btn';
+      btn.setAttribute('aria-label', 'Toggle sidebar');
+      btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 6h18v2H3zM3 11h18v2H3zM3 16h18v2H3z"></path></svg>';
+      btn.setAttribute('onclick', "var b = document.querySelector('[data-testid=\"stSidebarCollapseButton\"] button'); if (b) { b.click(); }");
+      parentDoc.body.appendChild(btn);
+    }
+    btn.style.left = getMainLeft() + 'px';
+  }
+
+  function sync() {
+    ensureButton();
+  }
+
+  function setupSwipe() {
+    var sx = 0;
+    var sy = 0;
+    parentDoc.addEventListener('touchstart', function (e) {
+      var t = e.changedTouches[0];
+      sx = t.screenX;
+      sy = t.screenY;
+    }, { passive: true });
+
+    parentDoc.addEventListener('touchend', function (e) {
+      var t = e.changedTouches[0];
+      var dx = t.screenX - sx;
+      var dy = t.screenY - sy;
+      if (Math.abs(dx) < 70 || Math.abs(dy) > 80) return;
+      if (dx > 0 && sx <= 40 && !isExpanded()) toggle();
+      if (dx < 0 && isExpanded()) toggle();
+    }, { passive: true });
+  }
+
+  function start() {
+    ensureButton();
+    parentWin.addEventListener('resize', sync);
+    parentWin.setInterval(sync, 600);
+    setupSwipe();
+    try {
+      if (parentWin.innerWidth <= 768 && isExpanded() && !parentWin.sessionStorage.getItem('custom-sidebar-mobile-inited')) {
+        parentWin.sessionStorage.setItem('custom-sidebar-mobile-inited', '1');
+        setTimeout(toggle, 0);
+      }
+    } catch (e) {}
+  }
+
+  var observer = new MutationObserver(sync);
+  function observe() {
+    if (parentDoc.body) {
+      observer.observe(parentDoc.body, { childList: true, subtree: true });
+      start();
+    } else {
+      setTimeout(observe, 100);
+    }
+  }
+  observe();
+})();
+</script>
+"""
+
+components.html(_sidebar_toggle_js, height=0, width=0)
 
 PROVIDERS = {
     "DeepSeek": {"base": "https://api.deepseek.com/v1", "model": "deepseek-chat"},
